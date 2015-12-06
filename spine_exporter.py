@@ -46,6 +46,18 @@ class SpineExporter(inkex.Effect):
 			dest="pretty",
 			help="Pretty-print the JSON file",
 		)
+		self.OptionParser.add_option(
+			"--merge",
+			action="store",
+			type="string",
+			dest="merge",
+			default="",
+			help="Spine JSON file to merge with"
+		)
+
+		# The default root bone
+		self.root_bone = {"name": "root"}
+		self.bone_coords = {}
 
 	@property
 	def svg(self):
@@ -80,13 +92,94 @@ class SpineExporter(inkex.Effect):
 		bbox = im.getbbox()
 		cropped = im.crop(bbox)
 		cropped.save(path)
-		global_width, global_height = im.size
-		left, top, right, bottom = bbox
+		return im.size, bbox
+
+	def get_default_struct(self):
+		"""
+		If the merge option was specified, attempt to load the given file
+		as JSON and return its contents.
+		Otherwise, return a default Spine structure.
+		"""
+		default = self.options.merge
+		if default:
+			try:
+				with open(default, "r") as f:
+					ret = json.load(f)
+				self.root_bone = ret["bones"][0]
+			except Exception:
+				inkex.errormsg("%r is not a valid Spine JSON file." % (default))
+				raise
+		else:
+			ret = {
+				"skeleton": {},
+				"bones": [self.root_bone],
+				"slots": [],
+				"skins": {"default": {}},
+				"animations": {"animation": {}}
+			}
+		return ret
+
+	def _get_obj(self, struct, name):
+		"""
+		Find a named slot or bone in a spine structure
+		"""
+		for obj in struct:
+			if obj["name"] == name:
+				return obj
+
+	def coords_to_spine(self, global_width, global_height, left, top, right, bottom):
 		width = right - left
 		height = bottom - top
 		x = 0.5 * width - (global_width * 0.5) + left
 		y = (global_height / 2) - ((top + bottom) / 2)
 		return x, y, width, height
+
+	def merge_spine_skin(self, struct, name, size, bbox):
+		# x, y, width, height = self.coords_to_spine(*size, *bbox)
+		# py3.5, grumble grumble
+		x, y, width, height = self.coords_to_spine(*size + bbox)
+
+		slot = self._get_obj(struct["slots"], name)
+		if slot:
+			# We found a slot, add its parent's coordinates to x/y
+			bone_x, bone_y = self.bone_coords[slot["bone"]]
+		else:
+			bone_x, bone_y = self.bone_coords[self.root_bone["name"]]
+
+		x += bone_x
+		y += bone_y
+
+		# You still here? Well that was fun but doesn't actually work :-)
+		# Damn Spine and its relative coordinate imports. Let's just hard-merge.
+		if slot:
+			# Revert existing slots
+			x, y, width, height = self.coords_to_spine(*size + bbox)
+			#struct["skins"]["default"][name] = {
+			#	name: {"x": x, "y": y, "width": width, "height": height},
+			#}
+			# Reset the slot's bone to root... =/
+			# slot["bone"] = self.root_bone["name"]
+			return
+
+		# fin
+
+		struct["skins"]["default"][name] = {
+			name: {"x": x, "y": y, "width": width, "height": height},
+		}
+
+	def merge_spine_slot(self, struct, name):
+		"""
+		Iterate over a Spine skeleton and add a bone only if it does not
+		already exist.
+		"""
+		slot = self._get_obj(struct["slots"], name)
+		if slot is None:
+			struct["slots"].append({
+				"name": name,
+				"bone": self.root_bone["name"],
+				"attachment": name
+			})
+			return True
 
 	def effect(self):
 		outdir = os.path.expanduser(self.options.outdir)
@@ -94,13 +187,20 @@ class SpineExporter(inkex.Effect):
 		if not os.path.exists(imagedir):
 			os.makedirs(imagedir)
 
-		spine_struct = {
-			"skeleton": {"images": imagedir},
-			"bones": [{"name": "root"}],
-			"slots": [],
-			"skins": {"default": {}},
-			"animations": {"animation": {}}
-		}
+		spine_struct = self.get_default_struct()
+		spine_struct["skeleton"]["images"] = imagedir
+
+		for bone in spine_struct["bones"]:
+			# Cache the World coordinates of every bone
+			x, y = bone.get("x", 0), bone.get("y", 0)
+			name = bone.get("parent")
+			while name:
+				parent = self._get_obj(spine_struct["bones"], name)
+				x += parent.get("x", 0)
+				y += parent.get("y", 0)
+				name = parent.get("parent")
+
+			self.bone_coords[bone["name"]] = x, y
 
 		for layer in self.layers:
 			id = layer.attrib["id"]
@@ -124,12 +224,11 @@ class SpineExporter(inkex.Effect):
 			# So instead of immediately generating cropped images, we pass
 			# --export-area-drawing which gives us images of the same size.
 			# We then get their bounding box and crop them with Pillow.
-			x, y, width, height = self.autocrop_in_place(outfile)
-
-			spine_struct["slots"].append({"name": label, "bone": "root", "attachment": label})
-			spine_struct["skins"]["default"][label] = {
-				label: {"x": x, "y": y, "width": width, "height": height},
-			}
+			size, bbox = self.autocrop_in_place(outfile)
+			self.merge_spine_skin(spine_struct, label, size, bbox)
+			# Slot merge must come after the skin merge because we need the
+			# original data.
+			self.merge_spine_slot(spine_struct, label)
 
 		if self.options.json:
 			path = os.path.join(outdir, "%s.json" % (self.friendly_name))

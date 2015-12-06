@@ -8,6 +8,7 @@
 	<param name="dpi" type="float" min="0" max="10000" _gui-text="Resolution (DPI)">90.0</param>
 	<param name="json" type="boolean" _gui-text="Save a JSON file">true</param>
 	<param name="pretty-print" type="boolean" _gui-text="Pretty-print JSON">true</param>
+	<param name="merge" type="string" min="0" max="10000" _gui-text="Merge with existing project (optional)"></param>
 	<effect needs-live-preview="false">
 		<object-type>all</object-type>
 		<effects-menu>
