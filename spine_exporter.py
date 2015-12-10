@@ -15,6 +15,11 @@ import subprocess
 INKSCAPE_LABEL = "{%s}label" % (inkex.NSS["inkscape"])
 
 
+def run_inkscape(args):
+	from subprocess import Popen, PIPE
+	return Popen(["inkscape"] + args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+
 class SpineExporter(inkex.Effect):
 	def __init__(self):
 		inkex.Effect.__init__(self)
@@ -85,6 +90,18 @@ class SpineExporter(inkex.Effect):
 			return ret
 
 		return get_layers(self.svg)
+
+	def get_bounding_box(self, id):
+		p = run_inkscape(["--shell"])
+		stdin = []
+		for k in ("x", "y", "width", "height"):
+			stdin.append("--file=%r --query-id=%r --query-%s" % (self.svg_file, id, k))
+		stdin.append("")  # For the last command
+		stdout, stderr = p.communicate("\n".join(stdin))
+		# Remove the "Inkscape interactive shell mode" noise
+		stdout = stdout[stdout.index("\n>") + 1:]
+		# inkex.debug(stdout)
+		return [float(f) for f in stdout.split(">")[1:-1]]
 
 	def autocrop_in_place(self, path):
 		from PIL import Image
@@ -225,6 +242,8 @@ class SpineExporter(inkex.Effect):
 			# --export-area-drawing which gives us images of the same size.
 			# We then get their bounding box and crop them with Pillow.
 			size, bbox = self.autocrop_in_place(outfile)
+			bbox2 = self.get_bounding_box(id)
+			inkex.debug("id=%r, label=%r, size=%r, bbox=%r, bbox2 = %r" % (id, label, size, bbox, bbox2))
 			self.merge_spine_skin(spine_struct, label, size, bbox)
 			# Slot merge must come after the skin merge because we need the
 			# original data.
