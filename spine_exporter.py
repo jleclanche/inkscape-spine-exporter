@@ -154,9 +154,9 @@ class SpineExporter(inkex.Effect):
 		if slot:
 			# Revert existing slots
 			x, y, width, height = self.coords_to_spine(*size + bbox)
-			#struct["skins"]["default"][name] = {
-			#	name: {"x": x, "y": y, "width": width, "height": height},
-			#}
+			# struct["skins"]["default"][name] = {
+			# 	name: {"x": x, "y": y, "width": width, "height": height},
+			# }
 			# Reset the slot's bone to root... =/
 			# slot["bone"] = self.root_bone["name"]
 			return
