@@ -4,13 +4,6 @@ Exports an SVG file from Inkscape to [Spine](https://esotericsoftware.com).
 Can generate a [Spine JSON file](https://esotericsoftware.com/spine-json-format).
 
 
-## Requirements
-
-* [Pillow](https://pypi.python.org/pypi/Pillow) for Python 2 must be installed
-  **system-wide**. It is usually available in `python2-pillow` or `python-pillow`
-  packages.
-
-
 ## Installation
 
 * Copy `spine_exporter.inx` and `spine_exporter.py`

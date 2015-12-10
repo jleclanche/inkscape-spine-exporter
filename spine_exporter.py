@@ -15,6 +15,11 @@ import subprocess
 INKSCAPE_LABEL = "{%s}label" % (inkex.NSS["inkscape"])
 
 
+def run_inkscape(args):
+	from subprocess import Popen, PIPE
+	return Popen(["inkscape"] + args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+
 class SpineExporter(inkex.Effect):
 	def __init__(self):
 		inkex.Effect.__init__(self)
@@ -86,6 +91,24 @@ class SpineExporter(inkex.Effect):
 
 		return get_layers(self.svg)
 
+	@property
+	def drawing_size(self):
+		x, y, width, height = self.get_bounding_box(self.svg.attrib["id"])
+		return width, height
+
+	def get_bounding_box(self, id):
+		p = run_inkscape(["--shell"])
+		stdin = []
+		for k in ("x", "y", "width", "height"):
+			stdin.append("--file=%r --query-id=%r --query-%s" % (self.svg_file, id, k))
+		stdin.append("")  # For the last command
+		stdout, stderr = p.communicate("\n".join(stdin))
+		# Remove the "Inkscape interactive shell mode" noise
+		stdout = stdout[stdout.index("\n>") + 1:]
+		# inkex.debug(stdout)
+		x, y, width, height = stdout.split(">")[1:-1]
+		return float(x), float(y), float(width), float(height)
+
 	def autocrop_in_place(self, path):
 		from PIL import Image
 		im = Image.open(path)
@@ -127,17 +150,15 @@ class SpineExporter(inkex.Effect):
 			if obj["name"] == name:
 				return obj
 
-	def coords_to_spine(self, global_width, global_height, left, top, right, bottom):
-		width = right - left
-		height = bottom - top
+	def coords_to_spine(self, left, top, width, height):
+		global_width, global_height = self.drawing_size
+		bottom = height + top
 		x = 0.5 * width - (global_width * 0.5) + left
-		y = (global_height / 2) - ((top + bottom) / 2)
+		y = (global_height - top - bottom) / 2
 		return x, y, width, height
 
-	def merge_spine_skin(self, struct, name, size, bbox):
-		# x, y, width, height = self.coords_to_spine(*size, *bbox)
-		# py3.5, grumble grumble
-		x, y, width, height = self.coords_to_spine(*size + bbox)
+	def merge_spine_skin(self, struct, name, bbox):
+		x, y, width, height = self.coords_to_spine(*bbox)
 
 		slot = self._get_obj(struct["slots"], name)
 		if slot:
@@ -153,10 +174,7 @@ class SpineExporter(inkex.Effect):
 		# Damn Spine and its relative coordinate imports. Let's just hard-merge.
 		if slot:
 			# Revert existing slots
-			x, y, width, height = self.coords_to_spine(*size + bbox)
-			# struct["skins"]["default"][name] = {
-			# 	name: {"x": x, "y": y, "width": width, "height": height},
-			# }
+			x, y, width, height = self.coords_to_spine(*bbox)
 			# Reset the slot's bone to root... =/
 			# slot["bone"] = self.root_bone["name"]
 			return
@@ -211,7 +229,6 @@ class SpineExporter(inkex.Effect):
 				"inkscape",
 				"--export-png", outfile,
 				"--export-id-only",
-				"--export-area-drawing",
 				"--export-id", id,
 				"--export-dpi", str(self.options.dpi),
 				"--file", self.args[-1],
@@ -220,12 +237,8 @@ class SpineExporter(inkex.Effect):
 			process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			process.wait()
 
-			# Inkscape and SVG don't make it easy to get the layer positions
-			# So instead of immediately generating cropped images, we pass
-			# --export-area-drawing which gives us images of the same size.
-			# We then get their bounding box and crop them with Pillow.
-			size, bbox = self.autocrop_in_place(outfile)
-			self.merge_spine_skin(spine_struct, label, size, bbox)
+			bbox = self.get_bounding_box(id)
+			self.merge_spine_skin(spine_struct, label, bbox)
 			# Slot merge must come after the skin merge because we need the
 			# original data.
 			self.merge_spine_slot(spine_struct, label)
