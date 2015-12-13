@@ -20,6 +20,14 @@ def run_inkscape(args):
 	return Popen(["inkscape"] + args, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
 
+def parse_css_style(style):
+	ret = {}
+	for directive in style.split(";"):
+		k, v = directive.split(":")
+		ret[k.lower()] = v.lower()
+	return ret
+
+
 class SpineExporter(inkex.Effect):
 	def __init__(self):
 		inkex.Effect.__init__(self)
@@ -44,6 +52,12 @@ class SpineExporter(inkex.Effect):
 			type="inkbool",
 			dest="json",
 			help="Create a Spine JSON file",
+		)
+		self.OptionParser.add_option(
+			"--ignore-hidden",
+			type="inkbool",
+			dest="ignore_hidden",
+			help="Ignore hidden layers",
 		)
 		self.OptionParser.add_option(
 			"--pretty-print",
@@ -223,6 +237,12 @@ class SpineExporter(inkex.Effect):
 		for layer in self.layers:
 			id = layer.attrib["id"]
 			label = layer.attrib.get(INKSCAPE_LABEL, id)
+
+			if self.options.ignore_hidden:
+				style = parse_css_style(layer.attrib.get("style", ""))
+				if style.get("display") == "none":
+					continue
+
 			outfile = os.path.join(imagedir, "%s.png" % (label))
 
 			command = (
