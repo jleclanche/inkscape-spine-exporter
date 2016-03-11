@@ -23,6 +23,9 @@ def run_inkscape(args):
 def parse_css_style(style):
 	ret = {}
 	for directive in style.split(";"):
+		directive = directive.strip()
+		if not directive:
+			continue
 		k, v = directive.split(":")
 		ret[k.lower()] = v.lower()
 	return ret
