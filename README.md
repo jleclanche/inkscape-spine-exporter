@@ -17,3 +17,8 @@ Extensions menu. Click it and modify the Output Directory at will.
 In that directory will be generated one image for each leaf layer. By default,
 a JSON file will be generated in the output directory and images will be output
 to the `./images` directory within it.
+
+## License
+
+This project is licensed under the terms of the MIT license.
+See the `LICENSE` file for the full license text.
