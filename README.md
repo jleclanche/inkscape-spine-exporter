@@ -6,7 +6,7 @@ Can generate a [Spine JSON file](https://esotericsoftware.com/spine-json-format)
 
 ## Installation
 
-* Copy `spine_exporter.inx` and `spine_exporter.py`
+* Copy `spine_exporter.inx` and `spine_exporter.py` to the Inkscape extensions directory (eg. `$HOME/.config/inkscape/extensions`)
 * Restart Inkscape
 
 ## Usage
